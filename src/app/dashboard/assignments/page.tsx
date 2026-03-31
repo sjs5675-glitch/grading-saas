@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, ClipboardList, MoreVertical, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ interface Assignment {
 
 export default function AssignmentsPage() {
   const { profile } = useAuth();
+  const router = useRouter();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -275,7 +277,7 @@ export default function AssignmentsPage() {
       ) : (
         <div className="space-y-3">
           {assignments.map((a) => (
-            <Card key={a.id}>
+            <Card key={a.id} className="cursor-pointer hover:border-blue-300 transition-colors" onClick={() => router.push(`/dashboard/assignments/${a.id}`)}>
               <CardContent className="py-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
