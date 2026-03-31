@@ -12,6 +12,8 @@ import {
   PenLine,
   FileText,
   Users,
+  Upload,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +64,22 @@ export default function AssignmentDetailPage() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // PDF 추출
+  const [extracting, setExtracting] = useState(false);
+  const [extractedQuestions, setExtractedQuestions] = useState<
+    {
+      question_number: number;
+      question_type: string;
+      question_text: string | null;
+      score: number;
+      choice_count: number | null;
+      correct_option: number | null;
+      correct_answers: string[] | null;
+      model_answer: string | null;
+      rubric: string | null;
+    }[]
+  | null>(null);
 
   // 문제 추가 폼
   const [qType, setQType] = useState<
@@ -166,6 +184,81 @@ export default function AssignmentDetailPage() {
     setQCorrectAnswers("");
     setQModelAnswer("");
     setQRubric("");
+  };
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const questionPdf = files[0];
+    // 두 번째 파일이 있으면 해설 PDF
+    const answerPdf = files.length > 1 ? files[1] : null;
+
+    setExtracting(true);
+    setExtractedQuestions(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("questionPdf", questionPdf);
+      if (answerPdf) formData.append("answerPdf", answerPdf);
+      formData.append("assignmentId", assignmentId);
+
+      const res = await fetch("/api/ai/extract-questions", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "AI 추출에 실패했습니다.");
+      }
+
+      const data = await res.json();
+      setExtractedQuestions(data.questions);
+      toast.success(`${data.questionCount}개 문제가 추출되었습니다. 확인 후 등록하세요.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "PDF 분석에 실패했습니다.");
+    } finally {
+      setExtracting(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleConfirmExtracted = async () => {
+    if (!extractedQuestions || !assignment) return;
+    setCreating(true);
+    try {
+      const startNum = assignment.questions.length;
+      for (let i = 0; i < extractedQuestions.length; i++) {
+        const eq = extractedQuestions[i];
+        await createQuestion({
+          assignment_id: assignmentId,
+          question_number: startNum + i + 1,
+          question_type: eq.question_type as "multiple_choice" | "short_answer" | "descriptive",
+          question_text: eq.question_text || undefined,
+          score: eq.score || 5,
+          choice_count: eq.choice_count || undefined,
+          correct_option: eq.correct_option || undefined,
+          correct_answers: eq.correct_answers || undefined,
+          model_answer: eq.model_answer || undefined,
+          rubric: eq.rubric || undefined,
+          display_order: startNum + i + 1,
+        });
+      }
+
+      const newTotal =
+        assignment.questions.reduce((s, q) => s + q.score, 0) +
+        extractedQuestions.reduce((s, q) => s + (q.score || 5), 0);
+      await updateAssignmentTotalScore(assignmentId, newTotal);
+
+      toast.success(`${extractedQuestions.length}개 문제가 등록되었습니다!`);
+      setExtractedQuestions(null);
+      fetchData();
+    } catch {
+      toast.error("문제 등록에 실패했습니다.");
+    } finally {
+      setCreating(false);
+    }
   };
 
   if (loading) {
@@ -276,6 +369,104 @@ export default function AssignmentDetailPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {/* PDF 업로드로 자동 추출 */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex items-center gap-3">
+            <Upload className="h-5 w-5 text-blue-600 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">PDF로 문제 자동 추출</p>
+              <p className="text-xs text-muted-foreground">
+                문제 PDF (+ 해설 PDF)를 올리면 AI가 문제와 정답을 자동 추출합니다
+              </p>
+            </div>
+            <label className="shrink-0">
+              <input
+                type="file"
+                accept=".pdf"
+                multiple
+                className="hidden"
+                onChange={handlePdfUpload}
+                disabled={extracting}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={extracting}
+                render={<span />}
+              >
+                {extracting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    분석중...
+                  </>
+                ) : (
+                  "PDF 업로드"
+                )}
+              </Button>
+            </label>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* AI 추출 결과 미리보기 */}
+      {extractedQuestions && (
+        <Card className="border-blue-300">
+          <CardHeader>
+            <CardTitle className="text-base">
+              AI 추출 결과 ({extractedQuestions.length}문제)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {extractedQuestions.map((eq, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 p-2 rounded-lg bg-blue-50 text-sm"
+              >
+                <span className="font-bold text-blue-700 shrink-0">
+                  {eq.question_number}
+                </span>
+                <Badge variant="outline" className="shrink-0">
+                  {eq.question_type === "multiple_choice"
+                    ? "객관식"
+                    : eq.question_type === "short_answer"
+                    ? "단답형"
+                    : "서술형"}
+                </Badge>
+                <span className="flex-1 truncate">
+                  {eq.question_text || "-"}
+                </span>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {eq.score}점
+                </span>
+                <span className="text-xs text-green-600 shrink-0">
+                  {eq.question_type === "multiple_choice"
+                    ? `정답: ${eq.correct_option}번`
+                    : eq.question_type === "short_answer"
+                    ? `정답: ${(eq.correct_answers || []).join(", ")}`
+                    : "서술형"}
+                </span>
+              </div>
+            ))}
+            <div className="flex gap-2 pt-2">
+              <Button
+                className="flex-1"
+                onClick={handleConfirmExtracted}
+                disabled={creating}
+              >
+                {creating ? "등록 중..." : `${extractedQuestions.length}개 문제 등록`}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setExtractedQuestions(null)}
+              >
+                취소
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* 문제 추가 버튼 + Dialog */}
