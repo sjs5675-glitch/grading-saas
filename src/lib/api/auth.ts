@@ -60,7 +60,7 @@ export async function signIn(email: string, password: string) {
 // 학생 로그인 (전화번호 기반)
 export async function studentSignIn(phone: string, password: string) {
   const normalizedPhone = phone.replace(/-/g, "");
-  const email = `${normalizedPhone}@student.grading.app`;
+  const email = `student-${normalizedPhone}@example.com`;
 
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
@@ -79,7 +79,7 @@ export async function createStudent(
   classIds: string[]
 ) {
   const normalizedPhone = phone.replace(/-/g, "");
-  const email = `${normalizedPhone}@student.grading.app`;
+  const email = `student-${normalizedPhone}@example.com`;
 
   // 1. Supabase Auth 유저 생성 (서버 사이드에서 처리 필요)
   // 클라이언트에서는 API route를 통해 처리
