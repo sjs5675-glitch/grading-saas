@@ -299,7 +299,7 @@ export default function AssignmentsPage() {
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                     {a.status === "draft" && (
                       <Button
                         size="sm"
