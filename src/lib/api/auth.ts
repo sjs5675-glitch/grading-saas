@@ -1,4 +1,4 @@
-import { supabase } from "../supabase";
+import { supabaseInstructor, supabaseStudent } from "../supabase";
 
 // 강사/관리자 가입 (실제 이메일)
 export async function signUp(
@@ -8,34 +8,37 @@ export async function signUp(
   role: "instructor" | "org_admin",
   orgId?: string
 ) {
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email,
-    password,
-  });
+  const { data: authData, error: authError } =
+    await supabaseInstructor.auth.signUp({
+      email,
+      password,
+    });
 
   if (authError) throw authError;
   if (!authData.user) throw new Error("가입에 실패했습니다.");
 
-  const { error: profileError } = await supabase.from("profiles").insert({
-    auth_user_id: authData.user.id,
-    role,
-    name,
-    email,
-    org_id: orgId || null,
-  });
+  const { error: profileError } = await supabaseInstructor
+    .from("profiles")
+    .insert({
+      auth_user_id: authData.user.id,
+      role,
+      name,
+      email,
+      org_id: orgId || null,
+    });
 
   if (profileError) throw profileError;
 
   // 개인 강사인 경우 free 구독 자동 생성
   if (role === "instructor" && !orgId) {
-    const { data: profile } = await supabase
+    const { data: profile } = await supabaseInstructor
       .from("profiles")
       .select("id")
       .eq("auth_user_id", authData.user.id)
       .single();
 
     if (profile) {
-      await supabase.from("subscriptions").insert({
+      await supabaseInstructor.from("subscriptions").insert({
         instructor_id: profile.id,
         plan: "free",
         max_students: 5,
@@ -46,9 +49,9 @@ export async function signUp(
   return authData;
 }
 
-// 로그인 (이메일 + 비밀번호)
+// 강사 로그인 (이메일 + 비밀번호)
 export async function signIn(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabaseInstructor.auth.signInWithPassword({
     email,
     password,
   });
@@ -62,7 +65,7 @@ export async function studentSignIn(phone: string, password: string) {
   const normalizedPhone = phone.replace(/-/g, "");
   const email = `student-${normalizedPhone}@example.com`;
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabaseStudent.auth.signInWithPassword({
     email,
     password,
   });
@@ -81,12 +84,16 @@ export async function createStudent(
   const normalizedPhone = phone.replace(/-/g, "");
   const email = `student-${normalizedPhone}@example.com`;
 
-  // 1. Supabase Auth 유저 생성 (서버 사이드에서 처리 필요)
-  // 클라이언트에서는 API route를 통해 처리
   const res = await fetch("/api/auth/create-student", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, phone: normalizedPhone, password, email, classIds }),
+    body: JSON.stringify({
+      name,
+      phone: normalizedPhone,
+      password,
+      email,
+      classIds,
+    }),
   });
 
   if (!res.ok) {
@@ -99,6 +106,7 @@ export async function createStudent(
 
 // 로그아웃
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
+  // 둘 다 로그아웃
+  await supabaseInstructor.auth.signOut();
+  await supabaseStudent.auth.signOut();
 }

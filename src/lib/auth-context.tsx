@@ -8,7 +8,8 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { supabase } from "./supabase";
+import { usePathname } from "next/navigation";
+import { supabaseInstructor, supabaseStudent, getSupabase } from "./supabase";
 
 type UserRole = "org_admin" | "instructor" | "student";
 
@@ -36,34 +37,43 @@ const AuthContext = createContext<AuthState>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const pathname = usePathname();
 
-  const fetchProfile = useCallback(async (authUserId: string) => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, role, name, email, phone, org_id")
-      .eq("auth_user_id", authUserId)
-      .single();
+  const isStudentPath = pathname?.startsWith("/student");
+  const client = isStudentPath ? supabaseStudent : supabaseInstructor;
 
-    if (error || !data) {
-      setProfile(null);
-    } else {
-      setProfile(data as Profile);
-    }
-    setIsLoading(false);
-  }, []);
+  const fetchProfile = useCallback(
+    async (authUserId: string) => {
+      const { data, error } = await client
+        .from("profiles")
+        .select("id, role, name, email, phone, org_id")
+        .eq("auth_user_id", authUserId)
+        .single();
+
+      if (error || !data) {
+        setProfile(null);
+      } else {
+        setProfile(data as Profile);
+      }
+      setIsLoading(false);
+    },
+    [client]
+  );
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    setIsLoading(true);
+    client.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         fetchProfile(session.user.id);
       } else {
+        setProfile(null);
         setIsLoading(false);
       }
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = client.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         fetchProfile(session.user.id);
       } else {
@@ -73,12 +83,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [fetchProfile]);
+  }, [client, fetchProfile]);
 
   const logout = useCallback(async () => {
-    await supabase.auth.signOut();
+    await client.auth.signOut();
     setProfile(null);
-  }, []);
+  }, [client]);
 
   return (
     <AuthContext.Provider value={{ profile, isLoading, logout }}>

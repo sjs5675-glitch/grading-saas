@@ -1,4 +1,4 @@
-import { supabase } from "../supabase";
+import { supabaseInstructor as supabase } from "../supabase";
 import type { Student } from "./types";
 
 export async function getStudents(): Promise<Student[]> {

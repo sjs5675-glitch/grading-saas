@@ -1,4 +1,4 @@
-import { supabase } from "../supabase";
+import { supabaseInstructor as supabase } from "../supabase";
 import type { ClassInfo } from "./types";
 
 export async function getClasses(): Promise<ClassInfo[]> {

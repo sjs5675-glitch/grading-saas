@@ -18,7 +18,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import { supabase } from "@/lib/supabase";
+import { supabaseInstructor as supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import type { ClassInfo } from "@/lib/api";
 import { getClasses } from "@/lib/api";
